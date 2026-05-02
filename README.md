@@ -46,10 +46,6 @@ There is no `Dockerfile` in this project. You can build a container image (if yo
 
 ## Running the Container Image
 
-## Running the Container Image
-
-## Running the Container Image
-
 ```bash
 ./mvnw spring-boot:build-image
 docker images | grep petclinic
