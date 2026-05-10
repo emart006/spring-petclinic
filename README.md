@@ -1,174 +1,348 @@
-# Spring PetClinic Sample Application [![Build Status](https://github.com/spring-projects/spring-petclinic/actions/workflows/maven-build.yml/badge.svg)](https://github.com/spring-projects/spring-petclinic/actions/workflows/maven-build.yml)[![Build Status](https://github.com/spring-projects/spring-petclinic/actions/workflows/gradle-build.yml/badge.svg)](https://github.com/spring-projects/spring-petclinic/actions/workflows/gradle-build.yml)
+# Cloud Clinic
 
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/spring-projects/spring-petclinic) [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=7517918)
+Production-ready Spring Boot deployment on AWS ECS Fargate using Terraform and GitHub Actions CI/CD.
 
-## Understanding the Spring Petclinic application with a few diagrams
-
-See the presentation here:  
-[Spring Petclinic Sample Application (legacy slides)](https://speakerdeck.com/michaelisvy/spring-petclinic-sample-application?slide=20)
-
-> **Note:** These slides refer to a legacy, pre–Spring Boot version of Petclinic and may not reflect the current Spring Boot–based implementation.  
-> For up-to-date information, please refer to this repository and its documentation.
+---
 
 
-## Run Petclinic locally
+# Project Overview
 
-Spring Petclinic is a [Spring Boot](https://spring.io/guides/gs/spring-boot) application built using [Maven](https://spring.io/guides/gs/maven/) or [Gradle](https://spring.io/guides/gs/gradle/).
-Java 17 or later is required for the build, and the application can run with Java 17 or newer.
+Cloud Clinic is a containerized Spring Boot application based on the Spring PetClinic application, deployed on AWS using a modern cloud-native infrastructure stack.
 
-You first need to clone the project locally:
+The solution provisions AWS infrastructure using Terraform and automates container deployment using GitHub Actions. The application runs on Amazon ECS Fargate behind an Application Load Balancer with centralized logging through CloudWatch.
 
-```bash
-git clone https://github.com/spring-projects/spring-petclinic.git
-cd spring-petclinic
-```
-If you are using Maven, you can start the application on the command-line as follows:
+The implementation focuses on:
 
-```bash
-./mvnw spring-boot:run
-```
-With Gradle, the command is as follows:
+- Infrastructure as Code
+- Automated CI/CD
+- Secure networking
+- Containerized deployments
+- Operational simplicity
+- Production-style AWS architecture
 
-```bash
-./gradlew bootRun
-```
+---
 
-You can then access the Petclinic at <http://localhost:8080/>.
+# Architecture Overview
 
-<img width="1042" alt="petclinic-screenshot" src="https://cloud.githubusercontent.com/assets/838318/19727082/2aee6d6c-9b8e-11e6-81fe-e889a5ddfded.png">
-
-You can, of course, run Petclinic in your favorite IDE.
-See below for more details.
-
-## Building a Container
-
-There is no `Dockerfile` in this project. You can build a container image (if you have a docker daemon) using the Spring Boot build plugin:
-
-```bash
-./mvnw spring-boot:build-image
+```text
+Developer
+   ↓
+GitHub Repository
+   ↓
+GitHub Actions CI/CD
+   ↓
+Docker Build
+   ↓
+Amazon ECR
+   ↓
+Amazon ECS Fargate
+   ↓
+Application Load Balancer
+   ↓
+End Users
 ```
 
-## In case you find a bug/suggested improvement for Spring Petclinic
+---
 
-Our issue tracker is available [here](https://github.com/spring-projects/spring-petclinic/issues).
+# AWS Services Used
 
-## Database configuration
+| Service | Purpose |
+|---|---|
+| Amazon ECS Fargate | Container orchestration |
+| Amazon ECR | Docker image registry |
+| Application Load Balancer | Traffic routing |
+| Amazon VPC | Network isolation |
+| CloudWatch Logs | Centralized logging |
+| IAM | Access control |
+| S3 | Terraform remote state |
+| GitHub Actions | CI/CD automation |
 
-In its default configuration, Petclinic uses an in-memory database (H2) which
-gets populated at startup with data. The h2 console is exposed at `http://localhost:8080/h2-console`,
-and it is possible to inspect the content of the database using the `jdbc:h2:mem:<uuid>` URL. The UUID is printed at startup to the console.
+---
 
-A similar setup is provided for MySQL and PostgreSQL if a persistent database configuration is needed. Note that whenever the database type changes, the app needs to run with a different profile: `spring.profiles.active=mysql` for MySQL or `spring.profiles.active=postgres` for PostgreSQL. See the [Spring Boot documentation](https://docs.spring.io/spring-boot/how-to/properties-and-configuration.html#howto.properties-and-configuration.set-active-spring-profiles) for more detail on how to set the active profile.
+# Infrastructure Design
 
-You can start MySQL or PostgreSQL locally with whatever installer works for your OS or use docker:
+## Networking
 
-```bash
-docker run -e MYSQL_USER=petclinic -e MYSQL_PASSWORD=petclinic -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=petclinic -p 3306:3306 mysql:9.6
+The infrastructure is deployed inside a dedicated VPC with:
+
+- 2 public subnets across multiple Availability Zones
+- 2 private subnets across multiple Availability Zones
+- Internet Gateway for public traffic
+- NAT Gateway for outbound internet access from private ECS tasks
+
+### Public Subnets
+
+Used for:
+- Application Load Balancer
+- NAT Gateway
+
+### Private Subnets
+
+Used for:
+- ECS Fargate tasks
+
+This ensures containers are not directly exposed to the public internet.
+
+---
+
+# ECS Architecture
+
+The application runs on Amazon ECS Fargate using:
+
+- ECS Cluster
+- ECS Service
+- ECS Task Definition
+- Rolling deployment strategy
+
+The ECS service:
+
+- runs inside private subnets
+- uses Fargate launch type
+- deploys behind an ALB target group
+- uses CloudWatch logging
+
+Health checks are configured using:
+
+```text
+/actuator/health
 ```
 
-or
+---
 
-```bash
-docker run -e POSTGRES_USER=petclinic -e POSTGRES_PASSWORD=petclinic -e POSTGRES_DB=petclinic -p 5432:5432 postgres:18.3
+# Security Design
+
+Security considerations implemented include:
+
+- ECS tasks deployed in private subnets
+- Security groups restricting inbound traffic
+- ALB exposed publicly on port 80 only
+- ECS containers accessible only from the ALB security group
+- IAM least-privilege model
+- Encrypted Terraform remote state storage
+- ECR image scanning enabled
+
+---
+
+# CI/CD Pipeline
+
+Deployment automation is implemented using GitHub Actions.
+
+Pipeline flow:
+
+```text
+Push to GitHub
+    ↓
+GitHub Actions workflow triggered
+    ↓
+Docker image build
+    ↓
+Push image to Amazon ECR
+    ↓
+Update ECS task definition
+    ↓
+Deploy updated container to ECS
 ```
 
-Further documentation is provided for [MySQL](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/resources/db/mysql/petclinic_db_setup_mysql.txt)
-and [PostgreSQL](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/resources/db/postgres/petclinic_db_setup_postgres.txt).
+The deployment uses ECS rolling updates to minimize downtime during releases.
 
-Instead of vanilla `docker` you can also use the provided `docker-compose.yml` file to start the database containers. Each one has a service named after the Spring profile:
+---
 
-```bash
-docker compose up mysql
+# Terraform Structure
+
+```text
+terraform/
+├── bootstrap/
+├── modules/
+│   ├── alb/
+│   ├── cloudwatch/
+│   ├── ecr/
+│   ├── ecs/
+│   ├── iam/
+│   ├── networking/
+│   ├── security-groups/
+│   └── vpc/
+└── environments/
+    └── prod/
 ```
 
-or
+The Terraform configuration is modularized to improve:
 
-```bash
-docker compose up postgres
+- maintainability
+- reusability
+- readability
+- separation of concerns
+
+---
+
+# Repository Structure
+
+```text
+cloud-clinic/
+├── .github/workflows/
+├── terraform/
+├── src/
+├── Dockerfile
+├── .dockerignore
+├── pom.xml
+├── README.md
+└── architecture-diagram.png
 ```
 
-## Test Applications
+---
 
-At development time we recommend you use the test applications set up as `main()` methods in `PetClinicIntegrationTests` (using the default H2 database and also adding Spring Boot Devtools), `MySqlTestApplication` and `PostgresIntegrationTests`. These are set up so that you can run the apps in your IDE to get fast feedback and also run the same classes as integration tests against the respective database. The MySql integration tests use Testcontainers to start the database in a Docker container, and the Postgres tests use Docker Compose to do the same thing.
+# Deployment Workflow
 
-## Compiling the CSS
+## Infrastructure Provisioning
 
-There is a `petclinic.css` in `src/main/resources/static/resources/css`. It was generated from the `petclinic.scss` source, combined with the [Bootstrap](https://getbootstrap.com/) library. If you make changes to the `scss`, or upgrade Bootstrap, you will need to re-compile the CSS resources using the Maven profile "css", i.e. `./mvnw package -P css`. There is no build profile for Gradle to compile the CSS.
+Terraform provisions:
 
-## Working with Petclinic in your IDE
+- networking
+- ECS infrastructure
+- ALB
+- IAM roles
+- CloudWatch logs
+- ECR repositories
 
-### Prerequisites
+## Application Deployment
 
-The following items should be installed in your system:
+GitHub Actions handles:
 
-- Java 17 or newer (full JDK, not a JRE)
-- [Git command line tool](https://help.github.com/articles/set-up-git)
-- Your preferred IDE
-  - Eclipse with the m2e plugin. Note: when m2e is available, there is a m2 icon in `Help -> About` dialog. If m2e is
-  not there, follow the installation process [here](https://www.eclipse.org/m2e/)
-  - [Spring Tools Suite](https://spring.io/tools) (STS)
-  - [IntelliJ IDEA](https://www.jetbrains.com/idea/)
-  - [VS Code](https://code.visualstudio.com)
+- Docker image builds
+- image pushes to ECR
+- ECS service deployments
 
-### Steps
+---
 
-1. On the command line run:
+# Docker Configuration
 
-    ```bash
-    git clone https://github.com/spring-projects/spring-petclinic.git
-    ```
+The application uses a multi-stage Docker build:
 
-1. Inside Eclipse or STS:
+- Maven build stage
+- lightweight runtime image
+- optimized container deployment
 
-    Open the project via `File -> Import -> Maven -> Existing Maven project`, then select the root directory of the cloned repo.
+The application listens on:
 
-    Then either build on the command line `./mvnw generate-resources` or use the Eclipse launcher (right-click on project and `Run As -> Maven install`) to generate the CSS. Run the application's main method by right-clicking on it and choosing `Run As -> Java Application`.
+```text
+Port 8080
+```
 
-1. Inside IntelliJ IDEA:
+---
 
-    In the main menu, choose `File -> Open` and select the Petclinic [pom.xml](pom.xml). Click on the `Open` button.
+# Monitoring and Logging
 
-    - CSS files are generated from the Maven build. You can build them on the command line `./mvnw generate-resources` or right-click on the `spring-petclinic` project then `Maven -> Generates sources and Update Folders`.
+Application logs are centralized using CloudWatch Logs.
 
-    - A run configuration named `PetClinicApplication` should have been created for you if you're using a recent Ultimate version. Otherwise, run the application by right-clicking on the `PetClinicApplication` main class and choosing `Run 'PetClinicApplication'`.
+The ECS service is configured with:
 
-1. Navigate to the Petclinic
+- awslogs driver
+- centralized log groups
+- log retention policies
 
-    Visit [http://localhost:8080](http://localhost:8080) in your browser.
+ALB health checks monitor application availability continuously.
 
-## Looking for something in particular?
+---
 
-|Spring Boot Configuration | Class or Java property files  |
-|--------------------------|---|
-|The Main Class | [PetClinicApplication](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/java/org/springframework/samples/petclinic/PetClinicApplication.java) |
-|Properties Files | [application.properties](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/resources) |
-|Caching | [CacheConfiguration](https://github.com/spring-projects/spring-petclinic/blob/main/src/main/java/org/springframework/samples/petclinic/system/CacheConfiguration.java) |
+# Design Decisions
 
-## Interesting Spring Petclinic branches and forks
+The solution was intentionally designed to balance simplicity, automation, and production-readiness.
 
-The Spring Petclinic "main" branch in the [spring-projects](https://github.com/spring-projects/spring-petclinic)
-GitHub org is the "canonical" implementation based on Spring Boot and Thymeleaf. There are
-[quite a few forks](https://spring-petclinic.github.io/docs/forks.html) in the GitHub org
-[spring-petclinic](https://github.com/spring-petclinic). If you are interested in using a different technology stack to implement the Pet Clinic, please join the community there.
+Key decisions include:
 
-## Interaction with other open-source projects
+- ECS Fargate was selected to eliminate EC2 instance management overhead.
+- GitHub Actions was used instead of CodePipeline/CodeBuild to simplify CI/CD and reduce complexity.
+- Terraform modules were separated by responsibility for improved maintainability.
+- Rolling deployments were selected over blue/green deployments to reduce infrastructure cost and operational complexity for the scope of the assessment.
+- ECS tasks run in private subnets for improved security.
+- CloudWatch Logs was selected for centralized operational visibility.
 
-One of the best parts about working on the Spring Petclinic application is that we have the opportunity to work in direct contact with many Open Source projects. We found bugs/suggested improvements on various topics such as Spring, Spring Data, Bean Validation and even Eclipse! In many cases, they've been fixed/implemented in just a few days.
-Here is a list of them:
+---
 
-| Name | Issue |
-|------|-------|
-| Spring JDBC: simplify usage of NamedParameterJdbcTemplate | [SPR-10256](https://github.com/spring-projects/spring-framework/issues/14889) and [SPR-10257](https://github.com/spring-projects/spring-framework/issues/14890) |
-| Bean Validation / Hibernate Validator: simplify Maven dependencies and backward compatibility |[HV-790](https://hibernate.atlassian.net/browse/HV-790) and [HV-792](https://hibernate.atlassian.net/browse/HV-792) |
-| Spring Data: provide more flexibility when working with JPQL queries | [DATAJPA-292](https://github.com/spring-projects/spring-data-jpa/issues/704) |
+# Assumptions
 
-## Contributing
+- Single production-style environment (`prod`)
+- HTTP used instead of HTTPS for assessment simplicity
+- Single NAT Gateway used to reduce infrastructure cost
+- GitHub repository secrets used for AWS authentication
+- Application scaling requirements are minimal for assessment scope
 
-The [issue tracker](https://github.com/spring-projects/spring-petclinic/issues) is the preferred channel for bug reports, feature requests and submitting pull requests.
+---
 
-For pull requests, editor preferences are available in the [editor config](.editorconfig) for easy use in common text editors. Read more and download plugins at <https://editorconfig.org>. All commits must include a __Signed-off-by__ trailer at the end of each commit message to indicate that the contributor agrees to the Developer Certificate of Origin.
-For additional details, please refer to the blog post [Hello DCO, Goodbye CLA: Simplifying Contributions to Spring](https://spring.io/blog/2025/01/06/hello-dco-goodbye-cla-simplifying-contributions-to-spring).
+# Future Improvements
 
-## License
+Potential production enhancements include:
 
-The Spring PetClinic sample application is released under version 2.0 of the [Apache License](https://www.apache.org/licenses/LICENSE-2.0).
+- HTTPS using ACM certificates
+- Route53 custom domain integration
+- AWS WAF integration
+- ECS auto scaling policies
+- Terraform state locking using DynamoDB
+- GitHub Actions OIDC authentication
+- Blue/green ECS deployments
+- Observability with Prometheus and Grafana
+- Container vulnerability scanning enhancements
+
+---
+
+# Cost Optimization Notes
+
+The infrastructure was designed with cost-awareness in mind.
+
+Implemented optimizations include:
+
+- ECS Fargate serverless compute
+- Single NAT Gateway deployment
+- Bounded CloudWatch log retention
+- Minimal always-on infrastructure
+
+---
+
+# Terraform Remote State
+
+Terraform remote state is stored in Amazon S3.
+
+Features:
+
+- versioning enabled
+- encryption enabled
+- centralized state management
+
+---
+
+# Deployment Verification
+
+The application was successfully deployed and verified through:
+
+- ECS service stability checks
+- ALB accessibility
+- CloudWatch logging validation
+- GitHub Actions deployment pipeline execution
+
+---
+
+# Key Outputs
+
+Terraform outputs include:
+
+- ALB DNS name
+- ECS cluster name
+- ECS service name
+- ECR repository name
+- CloudWatch log group
+- VPC and subnet IDs
+
+These outputs are consumed by the GitHub Actions deployment workflow.
+
+---
+
+# Conclusion
+
+This project demonstrates a production-style AWS deployment workflow using:
+
+- Terraform Infrastructure as Code
+- Docker containerization
+- Amazon ECS Fargate
+- GitHub Actions CI/CD
+- AWS networking and security best practices
+
+The implementation emphasizes automation, modularity, maintainability, and operational simplicity while remaining aligned with real-world DevOps deployment practices.
