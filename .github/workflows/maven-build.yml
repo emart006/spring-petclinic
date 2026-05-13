@@ -1,29 +1,45 @@
-# This workflow will build a Java project with Maven, and cache/restore any dependencies to improve the workflow execution time
-# For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-maven
-
-name: Java CI with Maven
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+name: "JFrog Maven Build"
+on: push
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        java: [ '8', '11', '17' ]
-
+    
     steps:
-      - uses: actions/checkout@v2
-      - name: Set up JDK ${{matrix.java}}
-        uses: actions/setup-java@v2
+      - name: Checkout
+        uses: actions/checkout@v4
+         
+      - name: Setup JFrog CLI
+        uses: jfrog/setup-jfrog-cli@v4
+        env:  
+          JF_URL: ${{ vars.JF_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+           
+      - name: Set up JDK
+        uses: actions/setup-java@v4
         with:
-          java-version: ${{matrix.java}}
-          distribution: 'adopt'
-          cache: maven
-      - name: Build with Maven Wrapper
-        run: ./mvnw -B package
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set CLI Config
+        # We use the same repo key for both releases and snapshots as requested
+        run: |
+          jf mvnc \
+            --repo-resolve-releases=spring-petclinic-libs-snapshot \
+            --repo-resolve-snapshots=spring-petclinic-libs-snapshot \
+            --repo-deploy-releases=spring-petclinic-libs-snapshot \
+            --repo-deploy-snapshots=spring-petclinic-libs-snapshot
+           
+      - name: Build and Install
+        # Use 'jf mvn' to trigger the JFrog Build Info extractor
+        # We keep the SSL bypass flags to handle the certificate issue
+        run: |
+          jf mvn clean install -U \
+            -Dmaven.wagon.http.ssl.insecure=true \
+            -Dmaven.wagon.http.ssl.allowall=true
+         
+      - name: Publish Build info
+        run: |
+          jf rt build-collect-env
+          jf rt build-add-git
+          jf rt build-publish
