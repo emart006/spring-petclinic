@@ -1,5 +1,10 @@
-name: "JFrog Maven Build"
+name: "JFrog Maven & Docker Build"
 on: push
+
+env:
+  # Replace these with your actual JFrog Docker repository and image name
+  DOCKER_REPO: "spring-petclinic-docker-local"
+  IMAGE_NAME: "spring-petclinic"
 
 jobs:
   build:
@@ -21,23 +26,38 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Set CLI Config
+      - name: Set Maven CLI Config
         run: |
           jf mvnc \
             --repo-resolve-releases=spring-petclinic-libs-snapshot \
             --repo-resolve-snapshots=spring-petclinic-libs-snapshot \
             --repo-deploy-releases=spring-petclinic-libs-snapshot-local \
             --repo-deploy-snapshots=spring-petclinic-libs-snapshot-local
-           
-      - name: Build and Install
-        # Use 'jf mvn' to trigger the JFrog Build Info extractor
-        # We keep the SSL bypass flags to handle the certificate issue
+            
+      - name: Run Tests & Build Jar
+        # 'mvn install' runs the test phase by default.
+        # We assign a build name/number to track this specific execution.
         run: |
           jf mvn clean install -U \
             -Dmaven.wagon.http.ssl.insecure=true \
             -Dmaven.wagon.http.ssl.allowall=true
+
+      - name: Docker Login
+        # Authenticates Docker to your Artifactory registry automatically
+        run: jf docker login
          
+      - name: Build & Push Docker Image
+        run: |
+          # Extract the hostname from JF_URL for the Docker tag (e.g., acme.jfrog.io)
+          REGISTRY_URL=$(echo "${{ vars.JF_URL }}" | sed -e 's|https://||' -e 's|http://||' -e 's|/artifactory||')
+          FULL_IMAGE_TAG="$REGISTRY_URL/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }}:${{ github.run_number }}"
+          
+          # Build and Push using the CLI to capture Docker Build Info
+          jf docker build -t $FULL_IMAGE_TAG .
+          jf docker push $FULL_IMAGE_TAG
+
       - name: Publish Build info
+        # Links your Maven artifacts and Docker layers into a single traceable record
         run: |
           jf rt build-collect-env
           jf rt build-add-git
