@@ -48,14 +48,23 @@ jobs:
          
       - name: Build & Push Docker Image
         run: |
-          # Extract the hostname from JF_URL for the Docker tag (e.g., acme.jfrog.io)
-          REGISTRY_URL=$(echo "${{ vars.JF_URL }}" | sed -e 's|https://||' -e 's|http://||' -e 's|/artifactory||')
-          FULL_IMAGE_TAG="$REGISTRY_URL/${{ env.DOCKER_REPO }}/${{ env.IMAGE_NAME }}:${{ github.run_number }}"
+          # 1. Clean the JF_URL to get just the hostname for Docker
+          # Example: https://solengemdemo.jfrog.io/artifactory -> solengemdemo.jfrog.io
+          REGISTRY_URL=$(echo "${{ vars.JF_URL }}" | sed -e 's|https://||' -e 's|http://||' -e 's|/artifactory||' -e 's|/||g')
           
-          # Build and Push using the CLI to capture Docker Build Info
+          # 2. Construct the full tag
+          # Format: <hostname>/<repo-key>/<image-name>:<tag>
+          FULL_IMAGE_TAG="$REGISTRY_URL/spring-petclinic-docker-local/spring-petclinic:${{ github.run_number }}"
+          
+          echo "Building image: $FULL_IMAGE_TAG"
+          
+          # 3. Build the image (looks for 'Dockerfile' in the current directory)
           jf docker build -t $FULL_IMAGE_TAG .
+          
+          # 4. Push to Artifactory
           jf docker push $FULL_IMAGE_TAG
 
+          
       - name: Publish Build info
         # Links your Maven artifacts and Docker layers into a single traceable record
         run: |
